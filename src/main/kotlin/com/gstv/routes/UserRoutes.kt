@@ -7,10 +7,12 @@ import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.deleteWhere
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
-import java.util.UUID
+import java.util.*
 
 fun Route.userRouting() {
     route("/user") {
@@ -27,7 +29,7 @@ fun Route.userRouting() {
                 message = "User not found",
                 status = HttpStatusCode.NotFound
             )
-            val user: List<User> = transaction { Users.select {  Users.id eq id }.map { Users.toUser(it) } }
+            val user: List<User> = transaction { Users.select { Users.id eq id }.map { Users.toUser(it) } }
             if (user.isNotEmpty()) return@get call.respond(user)
 
             return@get call.respond(
@@ -36,7 +38,7 @@ fun Route.userRouting() {
             )
         }
 
-        delete ("{id}"){
+        delete("{id}") {
 
             val id = call.parameters["id"] ?: return@delete call.respond(
                 message = "Insert user ID to delete a user",
@@ -47,26 +49,32 @@ fun Route.userRouting() {
             }
             if (delete == 1) return@delete call.respond(message = "Deleted", status = HttpStatusCode.OK)
 
-            return@delete call.respond(message = "User not found",status = HttpStatusCode.NotFound)
+            return@delete call.respond(message = "User not found", status = HttpStatusCode.NotFound)
 
         }
 
         post {
             val user = call.receive<User>()
             user.id = UUID.randomUUID().toString()
-
-            transaction {
-                Users.insert {
-                    it[id] = user.id!!
-                    it[name] = user.name
+            if (
+                user.name.isEmpty() ||
+                user.email.isEmpty() ||
+                user.password.isEmpty()
+            ) return@post call.respond(status = HttpStatusCode.PartialContent, "You are passing email, password or name empty")
+                transaction {
+                    Users.insert {
+                        it[id] = user.id!!
+                        it[name] = user.name
+                        it[email] = user.email
+                        it[password] = user.password
+                    }
                 }
-            }
-            call.respond(message = "Created",status = HttpStatusCode.Created)
+            call.respond(message = "Created", status = HttpStatusCode.Created)
         }
     }
 }
 
-fun Application.registerUserRoutes(){
+fun Application.registerUserRoutes() {
     routing {
         userRouting()
     }
